@@ -1,21 +1,64 @@
-// routes/userRoutes.js
 const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const User = require('../models/user');
+const auth = require('../middleware/auth');
 const router = express.Router();
 
-// Create a user
-router.post('/', async (req, res) => {
+// Register a new user
+router.post('/register', async (req, res) => {
+  const { name, email, password } = req.body;
   try {
-    const user = new User(req.body);
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    user = new User({ name, email, password });
     await user.save();
-    res.status(201).json(user);
+
+    const payload = { user: { id: user.id } };
+    const token = jwt.sign(payload, 'vrajdesaiisdoinginternshipincelebaltechnologies', { expiresIn: '1h' });
+    res.status(201).json({ token });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Login a user
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const payload = { user: { id: user.id } };
+    const token = jwt.sign(payload, 'your_jwt_secret', { expiresIn: '1h' });
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get logged-in user info
+router.get('/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
 // Get all users
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const users = await User.find();
     res.json(users);
@@ -25,7 +68,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get a single user by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (user) {
@@ -39,7 +82,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update a user by ID
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (user) {
@@ -53,7 +96,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete a user by ID
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (user) {
